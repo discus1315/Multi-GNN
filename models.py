@@ -1,5 +1,5 @@
 import torch.nn as nn
-from torch_geometric.nn import GINEConv, BatchNorm, Linear, GATConv, PNAConv, RGCNConv
+from torch_geometric.nn import GINEConv, BatchNorm, Linear, GATConv, PNAConv, RGCNConv, TransformerConv
 import torch.nn.functional as F
 import torch
 import logging
@@ -234,3 +234,85 @@ class RGCN(nn.Module):
         out = x
 
         return x
+
+# Helper class for the full Transformer block
+class TransformerBlock(nn.Module):
+    def __init__(self, in_channels, edge_dim, heads=8, dropout=0.1):
+        super().__init__()
+        # The TransformerConv layer for self-attention
+        self.attn = TransformerConv(
+            in_channels, 
+            in_channels // heads, 
+            heads=heads, 
+            dropout=dropout,
+            edge_dim=edge_dim
+        )
+        self.ln1 = nn.LayerNorm(in_channels)
+        
+        # The Feed-Forward Network
+        self.ffn = nn.Sequential(
+            nn.Linear(in_channels, in_channels * 4),
+            nn.ReLU(),
+            nn.Linear(in_channels * 4, in_channels)
+        )
+        self.ln2 = nn.LayerNorm(in_channels)
+        self.dropout = nn.Dropout(dropout)
+
+    def forward(self, x, edge_index, edge_attr=None):
+        attn_out = self.attn(x, edge_index, edge_attr)
+        x = x + self.dropout(attn_out)
+        x = self.ln1(x)
+        ffn_out = self.ffn(x)
+        x = x + self.dropout(ffn_out)
+        x = self.ln2(x)
+        return x
+
+class GraphTransformer(torch.nn.Module):
+    def __init__(self, num_features, num_gnn_layers, n_classes=2, 
+                 n_hidden=128, n_heads=8, edge_updates=False, 
+                 edge_dim=None, dropout=0.1, final_dropout=0.5):
+        super().__init__()
+        self.n_hidden = n_hidden
+        self.num_gnn_layers = num_gnn_layers
+        self.edge_updates = edge_updates
+        self.final_dropout = final_dropout
+
+        self.node_emb = nn.Linear(num_features, n_hidden)
+        self.edge_emb = nn.Linear(edge_dim, n_hidden)
+
+        self.blocks = nn.ModuleList()
+        for _ in range(self.num_gnn_layers):
+            # Pass the hidden dimension as the edge_dim for the blocks
+            self.blocks.append(TransformerBlock(n_hidden, n_hidden, n_heads, dropout))
+        
+        self.mlp = nn.Sequential(
+            Linear(n_hidden * 3, 50), 
+            nn.ReLU(), 
+            nn.Dropout(self.final_dropout),
+            Linear(50, 25), 
+            nn.ReLU(), 
+            nn.Dropout(self.final_dropout),
+            Linear(25, n_classes)
+        )
+            
+    def forward(self, x, edge_index, edge_attr):
+        src, dst = edge_index
+        
+        # Initial feature embeddings
+        x = self.node_emb(x)
+        edge_attr = self.edge_emb(edge_attr)
+        
+        # Apply Transformer blocks
+        for block in self.blocks:
+            # Pass edge_attr to the block's attention layer
+            x = block(x, edge_index, edge_attr)
+            
+        # Get the node embeddings for the source and destination nodes of each edge
+        src_nodes, dst_nodes = edge_index
+        x_src = x[src_nodes]
+        x_dst = x[dst_nodes]
+        
+        # Concatenate the features of the source node, destination node, and the edge itself
+        final_edge_features = torch.cat([x_src, x_dst, edge_attr], dim=-1)
+        
+        return self.mlp(final_edge_features)

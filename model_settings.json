@@ -53,5 +53,21 @@
       "w_ce1": [1, 1.001], "w_ce2": [6, 12], "norm_method": [0, 0.001], "dropout": [0, 0.05], "final_dropout": [0, 0.2]
     },
     "header": "run,tb,lr,n_hidden,n_mlp_layers,n_gnn_layers,loss,w_ce1,w_ce2,norm_method,dropout,final_dropout,epoch,tr_acc,tr_prec,tr_rec,tr_f1,tr_auc,val_acc,val_prec,val_rec,val_f1,val_auc,te_acc,te_prec,te_rec,te_f1,te_auc\n"
+  },
+  "graph_transformer": {
+    "params": {
+      "lr": 0.0005,
+      "n_hidden": 128,
+      "n_heads": 8,
+      "n_gnn_layers": 2,
+      "loss": "ce",
+      "w_ce1": 1.0,
+      "w_ce2": 6.0,
+      "norm_method": "z_normalize",
+      "dropout": 0.1,
+      "final_dropout": 0.5,
+      "edge_updates": true
+    },
+    "header": "run,tb,lr,n_hidden,n_heads,n_gnn_layers,loss,w_ce1,w_ce2,norm_method,dropout,final_dropout,epoch,tr_acc,tr_prec,tr_rec,tr_f1,tr_auc,val_acc,val_prec,val_rec,val_f1,val_auc,te_acc,te_prec,te_rec,te_f1,te_auc\n"
   }
 }

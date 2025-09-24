@@ -2,7 +2,7 @@ import torch
 import tqdm
 from sklearn.metrics import f1_score
 from train_util import AddEgoIds, extract_param, add_arange_ids, get_loaders, evaluate_homo, evaluate_hetero, save_model, load_model
-from models import GINe, PNA, GATe, RGCN
+from models import GATe, GINe, PNA, RGCN, GraphTransformer
 from torch_geometric.data import Data, HeteroData
 from torch_geometric.nn import to_hetero, summary
 from torch_geometric.utils import degree
@@ -160,6 +160,20 @@ def get_model(sample_batch, config, args):
             n_classes=2, n_hidden=round(config.n_hidden),
             edge_update=args.emlps, dropout=config.dropout, final_dropout=config.final_dropout, n_bases=None #(maybe)
         )
+    elif args.model == 'graph_transformer':
+        # Check for n_heads only if the model requires it
+        if not config.n_heads or config.n_hidden % config.n_heads != 0:
+            raise ValueError(f"For GraphTransformer, n_hidden ({config.n_hidden}) must be divisible by n_heads ({config.n_heads}).")
+        model = GraphTransformer(
+            num_features=n_feats,
+            num_gnn_layers=config.n_gnn_layers,
+            n_hidden=round(config.n_hidden),
+            n_heads=round(config.n_heads),
+            edge_dim=e_dim,
+            dropout=config.dropout,
+            final_dropout=config.final_dropout,
+            edge_updates=args.emlps
+        )
     
     return model
 
@@ -186,7 +200,7 @@ def train_gnn(tr_data, val_data, te_data, tr_inds, val_inds, te_inds, args, data
             "w_ce2": extract_param("w_ce2", args),
             "dropout": extract_param("dropout", args),
             "final_dropout": extract_param("final_dropout", args),
-            "n_heads": extract_param("n_heads", args) if args.model == 'gat' else None
+            "n_heads": extract_param("n_heads", args) if (args.model == 'gat' or args.model == 'graph_transformer') else None
         }
     )
 
